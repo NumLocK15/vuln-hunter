@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="#about">📖 About</a> •
+  <a href="#How does it work">📖 How does it work</a> •
   <a href="#installation">🏗️ Installation</a> •
   <a href="#usage">⛏️ Usage</a> •
   <a href="#examples">🚀 Examples</a> •
@@ -21,6 +22,15 @@ Vuln-Hunter is an automated workflow that utilizes existing community tools for 
 
 ## Tool Choices
 While there are many tools available in the community, it is crucial to choose those that can be adjusted to each assessor's preference. This is why [Nuclei](https://github.com/projectdiscovery/nuclei) by ProjectDiscovery is a top choice. Each pentester can create custom templates that fit their style using a simple YAML-based DSL.
+
+# How Does It Work
+
+The workflow of Vuln-Hunter is engineered to maximize efficiency by leveraging multi-threading. This approach significantly enhances the speed and effectiveness of the vulnerability hunting process. Below is an illustrative diagram demonstrating the workflow:
+
+![Workflow Diagram](vuln-hunter-workflow.png)
+
+This diagram highlights the interconnected nature of the tools and processes within Vuln-Hunter, ensuring that each stage of the vulnerability assessment is conducted thoroughly yet swiftly. By optimizing the use of each tool, Vuln-Hunter provides a comprehensive and streamlined experience for identifying potential vulnerabilities in domains and hosts. 
+
 
 ## Important Notes:
 - The effectiveness of scans depends on the templates used. Some community templates can be found at [Nuclei-Fuzzing Templates](https://github.com/projectdiscovery/fuzzing-templates). However, it is often better to create your own to fit your style.
