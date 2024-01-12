@@ -86,28 +86,48 @@ python vuln-hunter.py [options]
 ```
 # Examples
 
-Here are some example commands to illustrate how you can use Vuln-Hunter:
+These examples showcase the versatility of Vuln-Hunter and how it can be utilized for various scanning scenarios:
 
-1. Scan a single domain with a basic scan:
-   ```bash
-   python adhm_hunt.py -d example.com
-   ```
-2. Scan multiple domains from a file with both basic and fuzzing scans:
-  ```bash
-  python adhm_hunt.py -l domains.txt --complete
-  ```
-3. Run scans in silent mode for a single domain with a timeout of 15 minutes:
-  ```bash
-  python adhm_hunt.py -d example.com --silent -t 15
-  ```
-4. Run a complete scan with technology detection:
-  ```bash
-  python adhm_hunt.py -d example.com --complete --techdetect
-  ```
-5. Using both Katana and ParamSpider for URL extraction:
-  ```bash
-  python adhm_hunt.py -d example.com --fuzzing --allparams
-  ```
+1- Scan a single domain with a basic scan (no fuzzing or tech-detect):
+``` bash
+python vuln-Hunter.py -d example.com
+```
+2- Scan multiple domains from a file with fuzzing scan only (no basic):
+``` bash
+python vuln-Hunter.py -l domains.txt --fuzzing
+```
+3- Run scans in silent mode for a single domain with a timeout of 15 minutes:
+``` bash
+python vuln-Hunter.py -d example.com --silent -t 15
+```
+4- Run a complete scan with technology detection:
+``` bash
+python vuln-Hunter.py -d example.com --complete --techdetect
+```
+5- Using both Katana and ParamSpider for URL extraction:
+``` bash
+python vuln-Hunter.py -d example.com --fuzzing --allparams
+```
+6- Comprehensive scanning of a list of domains with techdetect, fuzzing, basic scans, and simultaneous usage of ParamSpider and Katana (Warning: This can be time-consuming):
+``` bash
+python vuln-Hunter.py -l domains.txt --complete --allparams --techdetect -cs 4 -t 15
+```
+7- Perform a basic scan with a custom number of concurrent scans:
+``` bash
+python vuln-Hunter.py -l domains.txt -cs 5
+```
+8- Run a silent, fuzzing-only scan for a list of domains with extended timeout:
+``` bash
+python vuln-Hunter.py -l domains.txt --fuzzing --silent -t 60
+```
+9- Execute a basic scan with technology detection on a single domain:
+``` bash
+python vuln-Hunter.py -d example.com --nobasic --techdetect
+```
+10- Run a full scan (basic, fuzzing, tech-detect) on a single domain with a custom timeout:
+``` bash
+python vuln-Hunter.py -d example.com --complete -t 20
+```
 
 # Contributing
 
