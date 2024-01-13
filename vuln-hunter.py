@@ -197,7 +197,7 @@ if args.allparams:
 
 # Define techdetect
 timeout_value = 900
-if args.allparams:
+if args.timeout:
     timeout_value = args.timeout * 60
 
 def run_command(command):
