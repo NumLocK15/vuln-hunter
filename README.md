@@ -46,6 +46,7 @@ Before using Vuln-Hunter, ensure the following tools are installed on your syste
 - [Subfinder](https://github.com/projectdiscovery/subfinder)
 - [ParamSpider](https://github.com/devanshbatham/ParamSpider)
 - [httpx](https://github.com/projectdiscovery/httpx)
+- [Feroxbuster](https://github.com/epi052/feroxbuster)
 
 Install these dependencies with the following commands:
 
@@ -57,6 +58,8 @@ go install github.com/projectdiscovery/katana/cmd/katana@latest
 go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
 git clone https://github.com/devanshbatham/paramspider
 cd paramspider && pip install .
+sudo apt update && sudo apt install -y feroxbuster
+                        
 
 #NOTE: Ensure your Go bin directory is included in your system's PATH. If it's not already set, temporarily add it with:
 export PATH=$PATH:$HOME/go/bin
@@ -78,6 +81,7 @@ To use Vuln-Hunter, run the script with the desired options. Below is the table 
 | `--silent`            | Run scans in silent mode.                                           |
 | `--techdetect`        | Run a technology detection scan on the target.                      |
 | `--allparams`         | Use both Katana and ParamSpider for URL extraction and merging.     |
+| `--nobrute`         | disable directory bruteforcing feature.     |
 
 Example usage:
 
@@ -100,15 +104,15 @@ python vuln-hunter.py -l domains.txt --fuzzing
 ``` bash
 python vuln-hunter.py -d example.com --silent -t 15
 ```
-4- Run a complete scan with technology detection:
+4- Run a complete scan with technology detection wihtout brute forcing:
 ``` bash
-python vuln-hunter.py -d example.com --complete --techdetect
+python vuln-hunter.py -d example.com --complete --techdetect --nobrute
 ```
 5- Using both Katana and ParamSpider for URL extraction:
 ``` bash
 python vuln-hunter.py -d example.com --fuzzing --allparams
 ```
-6- Comprehensive scanning of a list of domains with techdetect, fuzzing, basic scans, and simultaneous usage of ParamSpider and Katana (Warning: This can be time-consuming):
+6- Comprehensive scanning of a list of domains with directory bruteforcing, techdetect, fuzzing, basic scans, and simultaneous usage of ParamSpider and Katana (Warning: This can be time-consuming):
 ``` bash
 python vuln-hunter.py -l domains.txt --complete --allparams --techdetect -cs 4 -t 15
 ```
@@ -138,10 +142,6 @@ Vuln-Hunter is a synthesis of several powerful tools developed by the cybersecur
 - [Subfinder](https://github.com/projectdiscovery/subfinder)
 - [ParamSpider](https://github.com/devanshbatham/ParamSpider)
 - [httpx](https://github.com/projectdiscovery/httpx)
+- [Feroxbuster](https://github.com/epi052/feroxbuster)
 
 This workflow is developed solely by myself as a contribution to the cybersecurity community. If you wish to contribute, enhance, or fork the project for your purposes, you are more than welcome to do so. Any contributions that improve the tool or extend its capabilities are greatly appreciated. 
-
-Feel free to raise issues, submit pull requests, or suggest new features. Let's work together to make the cybersecurity space more robust and accessible to everyone. 
-
-Let's hunt vulnerabilities smarter, not harder! 🚀
-
