@@ -25,6 +25,8 @@ Usage:
 
 """
 
+import json
+import random
 import subprocess
 import argparse
 import os
@@ -92,10 +94,14 @@ Installation Instructions:
     git clone https://github.com/devanshbatham/paramspider
     cd paramspider
     pip install .
+  FeroxBuster:
+    sudo apt update && sudo apt install -y feroxbuster
+                        
   
   NOTE: Ensure that your Go bin directory is included in your system's PATH. If it's not already set, you can temporarily add it to your PATH with the following command:
   (export PATH=$PATH:$HOME/go/bin)
   This step is necessary to run tools installed via Go directly from the command line.
+  
 
 Examples:
     Scan a single domain with a basic scan:
@@ -106,6 +112,8 @@ Examples:
 
     Run scans in silent mode for a single domain with a timeout of 15 minutes:
         python adhm_hunt.py -d example.com --silent -t 15
+
+workflow created by (NumLocK15) https://github.com/NumLocK15/vuln-hunter
 """
 
 def is_valid_domain_or_ip(domain):
@@ -139,6 +147,8 @@ parser.add_argument('-t', '--timeout', type=int, default=30, help='Timeout for e
 parser.add_argument('--silent', action='store_true', help='Run scans in silent mode')
 parser.add_argument('--techdetect', action='store_true', help='Run a technoligy scan on the target')
 parser.add_argument('--allparams', action='store_true', help='using this option will use both katana and paramspider for url extraction then merge them before fuzzing')
+parser.add_argument('--nobrute', action='store_true', help='diable the bruteforcing feature and runs param grabber directly on the live domains')
+
 
 def check_prerequisites():
     tools = {
@@ -146,7 +156,8 @@ def check_prerequisites():
         "paramspider": "paramspider --help",
         "nuclei": "nuclei -version",
         "httpx": "httpx -version",
-        "subfinder": "subfinder -version"
+        "subfinder": "subfinder -version",
+        "feroxbuster": "feroxbuster --help"
     }
 
     all_installed = True
@@ -155,14 +166,33 @@ def check_prerequisites():
         try:
             subprocess.run(command.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print(f"Prerequisite check failed: {tool} is not installed or not found in PATH.")
+            print(f"{RED}Prerequisite check failed: {tool} is not installed or not found in PATH. {NC}\n")
             all_installed = False
-
+    if not (all_installed):
+        print (f"{GREEN} Installation Instructions:\n"
+            "nuclei:\n"
+            "    go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest\n"
+            "fuzzing templates:\n"
+            "    git clone https://github.com/projectdiscovery/fuzzing-templates.git\n"
+            "    mv fuzzing-templates /home/adhm/.local/nuclei-templates/\n"
+            "katana:\n"
+            "    go install github.com/projectdiscovery/katana/cmd/katana@latest\n"
+            "subfinder:\n"
+            "    go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest\n"
+            "paramspider:\n"
+            "    git clone https://github.com/devanshbatham/paramspider\n"
+            "    cd paramspider\n"
+            "    pip install .\n"
+            "FeroxBuster:\n"
+            "    sudo apt update && sudo apt install -y feroxbuster\n\n"
+            "NOTE: Ensure that your Go bin directory is included in your system's PATH. If it's not already set, you can temporarily add it to your PATH with the following command:\n"
+            "    (export PATH=$PATH:$HOME/go/bin)\n"
+            f"This step is necessary to run tools installed via Go directly from the command line.{NC}")
     return all_installed
 
 # Example usage
 if not check_prerequisites():
-    print("Please install all required prerequisites before running this script.")
+    print("*** Please install all required prerequisites before running this script.***")
     exit(1)
 
 args = parser.parse_args()
@@ -194,6 +224,10 @@ all_params = 0
 if args.allparams:
     all_params = 1
 
+# define bruteforcing Default it is running
+brute_status = 1
+if args.nobrute:
+    brute_status = 0
 
 # Define techdetect
 timeout_value = 900
@@ -210,12 +244,11 @@ def run_command(command):
     except subprocess.TimeoutExpired:
         print(f"{RED}Command timed out: {' '.join(command)}{NC}")
 
-def nuclie_scan (results_dir):
+def nuclie_scan (results_dir,livedomains):
     if not args.nobasic:
-        live_domains_file = f"{results_dir}/live-domains"
         nuclei_basic_output_file = f"{results_dir}/nuclei-basic-scan-results"
         nuclei_command = [
-            "nuclei", "-l", live_domains_file, "-rl", "500", "-c", "200",
+            "nuclei", "-l", livedomains, "-rl", "500", "-c", "200",
             "-bs", "10", "-timeout", "2", "-severity", "critical,high",
             "-o", nuclei_basic_output_file, "-stats"
         ]
@@ -288,15 +321,14 @@ def merge_and_deduplicate_urls(katana_file, paramspider_file, output_file):
             file.write(url + '\n')
 
 
-def tech_detect_func (results_dir):
+def tech_detect_func (results_dir,livedomains):
     # Run nuclie tech-detect
-    live_domains_file = f"{results_dir}/live-domains"
-    tech_domains_file = f"{results_dir}/tech-domains"
+    tech_domains_file = f"{results_dir}/Tech-domains.results"
 
     tech_command = [
         "nuclei", "-rl", "500", "-c", "200", "-bs", "10",
         "-timeout", "2", "-retries", "0", "-tags", "tech",
-        "-list", live_domains_file, "-o", tech_domains_file, "-stats"
+        "-list", livedomains, "-o", tech_domains_file, "-stats"
     ]
     run_command(tech_command)
     print(f"{GREEN} Checking Tecknoligy is completed. Results are stored in {results_dir}/tech-domains.{NC}") 
@@ -342,33 +374,95 @@ def run_katana (live_domains_file, extracted_params_file):
     run_command(katana_command)
     print(f"{GREEN}Parameterized URL search with Katana completed. Results are stored in {extracted_params_file}.{NC}")
 
-def extract_params (results_dir,paramspider_arg):
-    extracted_params_file = f"{results_dir}/extractedParamResults"
-    live_domains_file = f"{results_dir}/live-domains"
+def extract_urls_from_Json(json_file, output_file):
+    try:
+        urls = []
+        with open(json_file, 'r') as file:
+            for line in file:
+                try:
+                    data = json.loads(line)
+                    if 'url' in data:
+                        urls.append(data['url'] + '\n')
+                except json.JSONDecodeError as e:
+                    print(f"Error decoding JSON in line: {e}")
+
+        with open(output_file, 'w') as file:
+            file.writelines(urls)
+    except FileNotFoundError:
+        print(f"File {json_file} not found")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def directory_bruteforcing(brute_results,live_domains_file):
+ 
+    with open(live_domains_file, 'r') as domains:
+        for domain in domains:
+            scan_domain = domain.strip()
+            temp_output = f"temp_output_{str(random.random())[2:]}.json"
+            temp_output_clean = f"temp_output_clean_{str(random.random())[2:]}.json"
+
+            brute_command = ["feroxbuster", "--url", scan_domain, "--redirects", "-A", "--auto-bail", "-g","--json","-s","200", "-o", temp_output, "-w", "/usr/share/wordlists/seclists/Discovery/Web-Content/common.txt" ]
+            try:
+                subprocess.run(brute_command, timeout=600) # Timeout after 10 min per domain
+                extract_urls_from_Json (temp_output, temp_output_clean)
+
+                # Now append the temp output to the aggregated results
+                with open(brute_results, 'a') as agg_file:
+                    with open(temp_output_clean, 'r') as temp_file:
+                        agg_file.write(temp_file.read())
+                        agg_file.write("\n")
+                        os.remove(temp_output)
+                        os.remove(temp_output_clean)
+            except subprocess.TimeoutExpired:
+                print(f"{RED}Directory brute for {scan_domain} timed out.{NC}")
+    print(f"{GREEN}Directory Brute has been completed for {scan_domain}. Results are stored in {brute_results}.{NC}")
+
+
+def extract_params (results_dir,paramspider_arg,livedomains):
+    extracted_params_file = f"{results_dir}/Extracted_parameter.results"
+    brute_results = f"{results_dir}/Live_domains_with_brute.results"
 
     katana_extracted_params_file =  extracted_params_file +"-katana" 
     paramspider_extracted_params_file = extracted_params_file + "-paramspider"
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        if all_params:
-            # Run both ParamSpider and Katana concurrently
-            executor.submit(run_paramspider, live_domains_file, paramspider_extracted_params_file)
-            executor.submit(run_katana, live_domains_file, katana_extracted_params_file)
-        else:
-            # Run either ParamSpider or Katana
-            if paramspider_arg:
-                executor.submit(run_paramspider, live_domains_file, paramspider_extracted_params_file)
+    if brute_status :
+        directory_bruteforcing (brute_results,livedomains)
+        # Case of bruteforcing is the same but with different input, in this case the input will be the bruteforced domains not the live domains. 
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            if all_params:
+                # Run both ParamSpider and Katana concurrently
+                executor.submit(run_paramspider, brute_results, paramspider_extracted_params_file)
+                executor.submit(run_katana, brute_results, katana_extracted_params_file)
             else:
-                executor.submit(run_katana, live_domains_file, katana_extracted_params_file)
+                # Run either ParamSpider or Katana
+                if paramspider_arg:
+                    executor.submit(run_paramspider, brute_results, paramspider_extracted_params_file)
+                else:
+                    executor.submit(run_katana, brute_results, katana_extracted_params_file)
 
-    merge_and_deduplicate_urls (katana_extracted_params_file,paramspider_extracted_params_file,extracted_params_file)
+        merge_and_deduplicate_urls (katana_extracted_params_file,paramspider_extracted_params_file,extracted_params_file)
+    
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            if all_params:
+                # Run both ParamSpider and Katana concurrently
+                executor.submit(run_paramspider, livedomains, paramspider_extracted_params_file)
+                executor.submit(run_katana, livedomains, katana_extracted_params_file)
+            else:
+                # Run either ParamSpider or Katana
+                if paramspider_arg:
+                    executor.submit(run_paramspider, livedomains, paramspider_extracted_params_file)
+                else:
+                    executor.submit(run_katana, livedomains, katana_extracted_params_file)
+
+        merge_and_deduplicate_urls (katana_extracted_params_file,paramspider_extracted_params_file,extracted_params_file)
 
 def nuclie_fuzzing (results_dir):
-        
-    extracted_params_file = f"{results_dir}/extractedParamResults"
+
+    extracted_params_file = f"{results_dir}/Extracted_parameter.results"
 
     # Run nuclei for fuzzing scan
-    nuclei_fuzzing_output_file = f"{results_dir}/nuclei-fuzzer-results"
+    nuclei_fuzzing_output_file = f"{results_dir}/Nuclei_fuzzer.results"
     nuclei_command = [
         "nuclei", "-rl", "500", "-c", "200", "-bs", "10",
         "-timeout", "2", "-retries", "0", "-t", "fuzzing-templates",
@@ -395,46 +489,50 @@ def nuclie_fuzzing (results_dir):
 
 # Perform scan
 def perform_scan(scan_domain, scan_type, paramspider_arg):
+    
     #### Validate the domain before starting
     if not is_valid_domain_or_ip(scan_domain):
         print(f"Invalid domain format: {scan_domain}")
         return
-
     #### create the results folder
     results_dir = f"Results:{scan_domain}"
     os.makedirs(results_dir, exist_ok=True)
     print(f"Directory '{results_dir}' created for storing results.")
 
+
+    ## create the variable
+    subfinder_domains = f"{results_dir}/All-domains.results"
+    httpx_live_domains = f"{results_dir}/live_domains.results"
+
+    
     #### Starting the enumeration process
     # Run subfinder
-    subfinder_command = ["subfinder", "-d", scan_domain, "-o", f"{results_dir}/all-domains"]
+    subfinder_command = ["subfinder", "-d", scan_domain, "-o", subfinder_domains]
     if silent_mode_temp:
         subfinder_command.append("-silent")
     run_command(subfinder_command)
-    print(f"{GREEN}subdomain search with subfinder is completed. Results are stored in {results_dir}/all-domains.{NC}")
+    print(f"{GREEN}subdomain search with subfinder is completed. Results are stored in {subfinder_domains}{NC}")
 
 
     # Run httpx
-    httpx_command = ["httpx", "-l", f"{results_dir}/all-domains", "-o", f"{results_dir}/live-domains"]
+    httpx_command = ["httpx", "-l", subfinder_domains, "-o", httpx_live_domains]
     if silent_mode_temp:
         httpx_command.append("-silent")
 
     run_command(httpx_command)
-    print(f"{GREEN}live cheack with httpx is completed. Results are stored in {results_dir}/live-domains.{NC}")
-
-
+    print(f"{GREEN}live cheack with httpx is completed. Results are stored in {httpx_live_domains}")
+    
 
     #### starting the scanning process
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         futures = []
-        live_domains =f"{results_dir}/live-domains"
         if scan_type in ["basic", "complete"]:
-            futures.append(executor.submit(nuclie_scan, results_dir))
+            futures.append(executor.submit(nuclie_scan, results_dir, httpx_live_domains))
         if scan_type in ["fuzzing", "complete"]:
-            extract_params (results_dir,paramspider_arg)
+            extract_params (results_dir,paramspider_arg,httpx_live_domains)
             futures.append(executor.submit(nuclie_fuzzing, results_dir))
         if techdetect:
-            futures.append(executor.submit(tech_detect_func, results_dir))
+            futures.append(executor.submit(tech_detect_func, results_dir, httpx_live_domains))
 
         # Wait for all futures to complete
         for future in concurrent.futures.as_completed(futures):
