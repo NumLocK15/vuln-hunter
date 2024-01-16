@@ -144,4 +144,4 @@ Vuln-Hunter is a synthesis of several powerful tools developed by the cybersecur
 - [httpx](https://github.com/projectdiscovery/httpx)
 - [Feroxbuster](https://github.com/epi052/feroxbuster)
 
-This workflow is developed solely by myself as a contribution to the cybersecurity community. If you wish to contribute, enhance, or fork the project for your purposes, you are more than welcome to do so. Any contributions that improve the tool or extend its capabilities are greatly appreciated. 
+This workflow is developed as a contribution to the cybersecurity community. If you wish to contribute, enhance, or fork the project for your purposes, you are more than welcome to do so. Any contributions that improve the tool or extend its capabilities are greatly appreciated. 
