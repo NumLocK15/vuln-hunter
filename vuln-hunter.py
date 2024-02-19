@@ -397,18 +397,21 @@ def extract_urls_from_Json(json_file, output_file):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-def directory_bruteforcing(brute_results,live_domains_file):
- 
+def directory_bruteforcing(brute_results, live_domains_file):
     with open(live_domains_file, 'r') as domains:
         for domain in domains:
             scan_domain = domain.strip()
             temp_output = f"temp_output_{str(random.random())[2:]}.json"
             temp_output_clean = f"temp_output_clean_{str(random.random())[2:]}.json"
 
-            brute_command = ["feroxbuster", "--url", scan_domain, "--redirects", "-A", "--auto-bail", "-g","--json","-s","200", "-o", temp_output, "-w", "/usr/share/wordlists/seclists/Discovery/Web-Content/common.txt" ]
+            brute_command = [
+                "feroxbuster", "--url", scan_domain, "-A", "--auto-bail", "-g",
+                "--json", "-s", "200", "-o", temp_output, "-w", "/usr/share/wordlists/seclists/Discovery/Web-Content/common.txt"
+            ]
+
             try:
-                subprocess.run(brute_command, timeout=600) # Timeout after 10 min per domain
-                extract_urls_from_Json (temp_output, temp_output_clean)
+                subprocess.run(brute_command, timeout=600)  # Timeout after 10 min per domain
+                extract_urls_from_Json(temp_output, temp_output_clean)
 
                 # Now append the temp output to the aggregated results
                 with open(brute_results, 'a') as agg_file:
@@ -419,7 +422,9 @@ def directory_bruteforcing(brute_results,live_domains_file):
                         os.remove(temp_output_clean)
             except subprocess.TimeoutExpired:
                 print(f"{RED}Directory brute for {scan_domain} timed out.{NC}")
-    print(f"{GREEN}Directory Brute has been completed for {scan_domain}. Results are stored in {brute_results}.{NC}")
+            
+    print(f"{GREEN}Directory Brute has been completed. Results are stored in {brute_results}.{NC}")
+
 
 
 def extract_params (results_dir,paramspider_arg,livedomains):
@@ -469,7 +474,7 @@ def nuclie_fuzzing (results_dir):
     nuclei_fuzzing_output_file = f"{results_dir}/Nuclei_fuzzer.results"
     nuclei_command = [
         "nuclei", "-rl", "500", "-c", "200", "-bs", "100",
-        "-timeout", "1", "-retries", "0", "-t", "~/.local/nuclei-templates/fuzzing-templates",
+        "-timeout", "1", "-retries", "0", "-t", "fuzzing-templates",
         "-list", extracted_params_file, "-o", nuclei_fuzzing_output_file, "-stats"
     ]
     if silent_mode_temp:
