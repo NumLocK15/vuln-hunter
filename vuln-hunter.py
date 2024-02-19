@@ -145,9 +145,9 @@ parser.add_argument('--nobasic', action='store_true', default=0,help='disable nu
 parser.add_argument('-cs', '--concurrentscans', type=int, default=2, help='Number of concurrent scans')
 parser.add_argument('-t', '--timeout', type=int, default=30, help='Timeout for each scan in minutes')
 parser.add_argument('--silent', action='store_true', help='Run scans in silent mode')
-parser.add_argument('--techdetect', action='store_true', help='Run a technoligy scan on the target')
 parser.add_argument('--allparams', action='store_true', help='using this option will use both katana and paramspider for url extraction then merge them before fuzzing')
 parser.add_argument('--nobrute', action='store_true', help='diable the bruteforcing feature and runs param grabber directly on the live domains')
+
 
 
 def check_prerequisites():
@@ -157,7 +157,7 @@ def check_prerequisites():
         "nuclei": "nuclei -version",
         "httpx": "httpx -version",
         "subfinder": "subfinder -version",
-        "feroxbuster": "feroxbuster --help"
+        "feroxbuster": "feroxbuster --help",
     }
 
     all_installed = True
@@ -168,26 +168,34 @@ def check_prerequisites():
         except (subprocess.CalledProcessError, FileNotFoundError):
             print(f"{RED}Prerequisite check failed: {tool} is not installed or not found in PATH. {NC}\n")
             all_installed = False
-    if not (all_installed):
-        print (f"{GREEN} Installation Instructions:\n"
-            "nuclei:\n"
-            "    go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest\n"
-            "fuzzing templates:\n"
-            "    git clone https://github.com/projectdiscovery/fuzzing-templates.git\n"
-            "    mv fuzzing-templates /home/adhm/.local/nuclei-templates/\n"
-            "katana:\n"
-            "    go install github.com/projectdiscovery/katana/cmd/katana@latest\n"
-            "subfinder:\n"
-            "    go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest\n"
-            "paramspider:\n"
-            "    git clone https://github.com/devanshbatham/paramspider\n"
-            "    cd paramspider\n"
-            "    pip install .\n"
-            "FeroxBuster:\n"
-            "    sudo apt update && sudo apt install -y feroxbuster\n\n"
-            "NOTE: Ensure that your Go bin directory is included in your system's PATH. If it's not already set, you can temporarily add it to your PATH with the following command:\n"
-            "    (export PATH=$PATH:$HOME/go/bin)\n"
-            f"This step is necessary to run tools installed via Go directly from the command line.{NC}")
+
+    # Check if the directory exists
+    templates_directory = os.path.expanduser("~/.local/nuclei-templates/fuzzing-templates")
+    if not os.path.exists(templates_directory):
+        print(f"{RED}Prerequisite check failed: The fuzzing template directory {templates_directory} was not found. {NC}\n")
+        all_installed = False
+
+    if not all_installed:
+        print (f"{GREEN}Installation Instructions:\n"
+                "nuclei:\n"
+                "    go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest\n"
+                "fuzzing templates:\n"
+                "    git clone https://github.com/projectdiscovery/fuzzing-templates.git\n"
+                "    mv fuzzing-templates /home/adhm/.local/nuclei-templates/\n"
+                "katana:\n"
+                "    go install github.com/projectdiscovery/katana/cmd/katana@latest\n"
+                "subfinder:\n"
+                "    go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest\n"
+                "paramspider:\n"
+                "    git clone https://github.com/devanshbatham/paramspider\n"
+                "    cd paramspider\n"
+                "    pip install .\n"
+                "FeroxBuster:\n"
+                "    sudo apt update && sudo apt install -y feroxbuster\n\n"
+                "NOTE: Ensure that your Go bin directory is included in your system's PATH. If it's not already set, you can temporarily add it to your PATH with the following command:\n"
+                "    (export PATH=$PATH:$HOME/go/bin)\n"
+                f"This step is necessary to run tools installed via Go directly from the command line.{NC}")
+
     return all_installed
 
 # Example usage
@@ -214,10 +222,6 @@ silent_mode_temp = 0
 if args.silent:
     silent_mode_temp = 1
 
-# Define techdetect
-techdetect = 0
-if args.techdetect:
-    techdetect = 1
 
 # Define allparams for exuting paramspider and katana
 all_params = 0
@@ -229,7 +233,7 @@ brute_status = 1
 if args.nobrute:
     brute_status = 0
 
-# Define techdetect
+# Define timeout
 timeout_value = 900
 if args.timeout:
     timeout_value = args.timeout * 60
@@ -249,7 +253,7 @@ def nuclie_scan (results_dir,livedomains):
         nuclei_basic_output_file = f"{results_dir}/nuclei-basic-scan-results"
         nuclei_command = [
             "nuclei", "-l", livedomains, "-rl", "500", "-c", "200",
-            "-bs", "10", "-timeout", "2", "-severity", "critical,high",
+            "-bs", "100", "-timeout", "1", "-tags" ,"wp-plugin,cve,wordpress,panel,xss,exposure,osint,tech,lfi,edb",
             "-o", nuclei_basic_output_file, "-stats"
         ]
         if silent_mode_temp:
@@ -321,17 +325,17 @@ def merge_and_deduplicate_urls(katana_file, paramspider_file, output_file):
             file.write(url + '\n')
 
 
-def tech_detect_func (results_dir,livedomains):
-    # Run nuclie tech-detect
-    tech_domains_file = f"{results_dir}/Tech-domains.results"
+# def tech_detect_func (results_dir,livedomains):
+#     # Run nuclie tech-detect
+#     tech_domains_file = f"{results_dir}/Tech-domains.results"
 
-    tech_command = [
-        "nuclei", "-rl", "500", "-c", "200", "-bs", "10",
-        "-timeout", "2", "-retries", "0", "-tags", "tech",
-        "-list", livedomains, "-o", tech_domains_file, "-stats"
-    ]
-    run_command(tech_command)
-    print(f"{GREEN} Checking Tecknoligy is completed. Results are stored in {results_dir}/tech-domains.{NC}") 
+#     tech_command = [
+#         "nuclei", "-rl", "500", "-c", "200", "-bs", "10",
+#         "-timeout", "2", "-retries", "0", "-tags", "tech",
+#         "-list", livedomains, "-o", tech_domains_file, "-stats"
+#     ]
+#     run_command(tech_command)
+#     print(f"{GREEN} Checking Tecknoligy is completed. Results are stored in {results_dir}/tech-domains.{NC}") 
 
 def run_paramspider (live_domains_file, extracted_params_file):
    
@@ -464,8 +468,8 @@ def nuclie_fuzzing (results_dir):
     # Run nuclei for fuzzing scan
     nuclei_fuzzing_output_file = f"{results_dir}/Nuclei_fuzzer.results"
     nuclei_command = [
-        "nuclei", "-rl", "500", "-c", "200", "-bs", "10",
-        "-timeout", "2", "-retries", "0", "-t", "fuzzing-templates",
+        "nuclei", "-rl", "500", "-c", "200", "-bs", "100",
+        "-timeout", "1", "-retries", "0", "-t", "$HOME/.local/nuclei-templates/",
         "-list", extracted_params_file, "-o", nuclei_fuzzing_output_file, "-stats"
     ]
     if silent_mode_temp:
@@ -515,7 +519,7 @@ def perform_scan(scan_domain, scan_type, paramspider_arg):
 
 
     # Run httpx
-    httpx_command = ["httpx", "-l", subfinder_domains, "-o", httpx_live_domains]
+    httpx_command = ["httpx", "-l", subfinder_domains, "-o", httpx_live_domains,"-t","100","-rl","300","-p","80,81,443,1433,1434,1521,1944,2301,3000,3128,3306,4000,4001,4002,4100,5000,5432,5800,5801,5802,6346,6347,7001,7002,8000,8001,8080,8443,8888,9000,9090,9001,9443,30821"]
     if silent_mode_temp:
         httpx_command.append("-silent")
 
@@ -531,8 +535,7 @@ def perform_scan(scan_domain, scan_type, paramspider_arg):
         if scan_type in ["fuzzing", "complete"]:
             extract_params (results_dir,paramspider_arg,httpx_live_domains)
             futures.append(executor.submit(nuclie_fuzzing, results_dir))
-        if techdetect:
-            futures.append(executor.submit(tech_detect_func, results_dir, httpx_live_domains))
+
 
         # Wait for all futures to complete
         for future in concurrent.futures.as_completed(futures):
