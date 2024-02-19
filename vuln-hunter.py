@@ -469,7 +469,7 @@ def nuclie_fuzzing (results_dir):
     nuclei_fuzzing_output_file = f"{results_dir}/Nuclei_fuzzer.results"
     nuclei_command = [
         "nuclei", "-rl", "500", "-c", "200", "-bs", "100",
-        "-timeout", "1", "-retries", "0", "-t", "$HOME/.local/nuclei-templates/",
+        "-timeout", "1", "-retries", "0", "-t", "~/.local/nuclei-templates/fuzzing-templates",
         "-list", extracted_params_file, "-o", nuclei_fuzzing_output_file, "-stats"
     ]
     if silent_mode_temp:
