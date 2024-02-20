@@ -26,10 +26,12 @@ Usage:
 """
 
 import json
+import logging
 import random
 import subprocess
 import argparse
 import os
+import shutil
 import re
 import concurrent.futures
 import threading
@@ -67,7 +69,7 @@ Vuln-Hunter: Automated Domain and Host Monitoring Tool
 This tool is designed to automate the process of scanning domains and hosts for vulnerabilities and misconfigurations. It supports various scanning modes and options to customize your security assessment needs.
 
 Usage:
-    python adhm_hunt.py [options]
+    python vuln_hunt.py [options]
 
 Options:
     -d, --domain          Specify a single domain for scanning.
@@ -85,7 +87,7 @@ Installation Instructions:
     go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
   fuzzing templates:
     git clone https://github.com/projectdiscovery/fuzzing-templates.git
-    mv fuzzing-templates /home/adhm/.local/nuclei-templates/
+    mv fuzzing-templates ~/.local/nuclei-templates/
   katana:
     go install github.com/projectdiscovery/katana/cmd/katana@latest
   subfinder:
@@ -105,13 +107,13 @@ Installation Instructions:
 
 Examples:
     Scan a single domain with a basic scan:
-        python adhm_hunt.py -d example.com
+        python vuln_hunt.py-d example.com
 
     Scan multiple domains from a file with both basic and fuzzing scans:
-        python adhm_hunt.py -l domains.txt --complete
+        python vuln_hunt.py-l domains.txt --complete
 
     Run scans in silent mode for a single domain with a timeout of 15 minutes:
-        python adhm_hunt.py -d example.com --silent -t 15
+        python vuln_hunt.py-d example.com --silent -t 15
 
 workflow created by (NumLocK15) https://github.com/NumLocK15/vuln-hunter
 """
@@ -181,7 +183,7 @@ def check_prerequisites():
                 "    go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest\n"
                 "fuzzing templates:\n"
                 "    git clone https://github.com/projectdiscovery/fuzzing-templates.git\n"
-                "    mv fuzzing-templates /home/adhm/.local/nuclei-templates/\n"
+                "    mv fuzzing-templates ~/.local/nuclei-templates/\n"
                 "katana:\n"
                 "    go install github.com/projectdiscovery/katana/cmd/katana@latest\n"
                 "subfinder:\n"
@@ -371,7 +373,7 @@ def run_paramspider (live_domains_file, extracted_params_file):
 def run_katana (live_domains_file, extracted_params_file):
     # Run Katana with output directed to a file
 
-    katana_command = ["katana", "-list", live_domains_file, "-f", "qurl", "-timeout", "2","-aff", "-c", "50", "-p", "50","-ignore-query-params","-strategy", "breadth-first", "-ef","png,css,js", "-o", extracted_params_file]
+    katana_command = ["katana", "-list", live_domains_file, "-f", "qurl", "-timeout", "2","-aff", "-c", "50", "-p", "50","-ignore-query-params","-strategy", "breadth-first", "-o", extracted_params_file]
     katana_command.append("-silent")
     katana_command.append("-ignore-query-params")
 
@@ -398,33 +400,70 @@ def extract_urls_from_Json(json_file, output_file):
         print(f"An error occurred: {e}")
 
 def directory_bruteforcing(brute_results, live_domains_file):
-    with open(live_domains_file, 'r') as domains:
-        for domain in domains:
-            scan_domain = domain.strip()
-            temp_output = f"temp_output_{str(random.random())[2:]}.json"
-            temp_output_clean = f"temp_output_clean_{str(random.random())[2:]}.json"
+    def process_domain(domain):
+        scan_domain = domain.strip()
+        temp_output = f"temp_output_{str(random.random())[2:]}.json"
+        temp_output_clean = f"temp_output_clean_{str(random.random())[2:]}.json"
 
-            brute_command = [
-                "feroxbuster", "--url", scan_domain, "-A", "--auto-bail", "-g",
-                "--json", "-s", "200", "-o", temp_output, "-w", "/usr/share/wordlists/seclists/Discovery/Web-Content/common.txt"
-            ]
+        brute_command = [
+            "feroxbuster", "--url", scan_domain, "-A", "--auto-bail", "-g",
+            "--json", "-s", "200", "-o", temp_output, "-w", "/usr/share/wordlists/seclists/Discovery/Web-Content/common.txt", "-k"
+        ]
 
-            try:
-                subprocess.run(brute_command, timeout=600)  # Timeout after 10 min per domain
-                extract_urls_from_Json(temp_output, temp_output_clean)
+        try:
+            subprocess.run(brute_command, timeout=300)  # Timeout after 5 min per domain
+            extract_urls_from_Json(temp_output, temp_output_clean)
 
-                # Now append the temp output to the aggregated results
-                with open(brute_results, 'a') as agg_file:
-                    with open(temp_output_clean, 'r') as temp_file:
-                        agg_file.write(temp_file.read())
-                        agg_file.write("\n")
-                        os.remove(temp_output)
-                        os.remove(temp_output_clean)
-            except subprocess.TimeoutExpired:
-                print(f"{RED}Directory brute for {scan_domain} timed out.{NC}")
-            
-    print(f"{GREEN}Directory Brute has been completed. Results are stored in {brute_results}.{NC}")
+            # Now append the temp output to the aggregated results
+            with open(brute_results, 'a') as agg_file:
+                with open(temp_output_clean, 'r') as temp_file:
+                    agg_file.write(temp_file.read())
+                    agg_file.write("\n")
 
+            os.remove(temp_output)
+            os.remove(temp_output_clean)
+        except subprocess.TimeoutExpired:
+            logging.warning(f"Directory brute for {scan_domain} timed out.")
+            os.remove(temp_output)
+            os.remove(temp_output_clean)
+        except Exception as e:
+            logging.error(f"An error occurred for {scan_domain}: {e}")
+            os.remove(temp_output)
+            os.remove(temp_output_clean)
+
+    try:
+        with open(live_domains_file, 'r') as domains:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                executor.map(process_domain, domains)
+
+        remove_empty_lines(brute_results)
+        print(f"{GREEN}Directory Brute has been completed. Results are stored in {brute_results}.{NC}")
+    except Exception as e:
+        logging.error(f"An error occurred during directory brute-forcing: {e}")
+
+
+def remove_empty_lines(input_file):
+    try:
+        with open(input_file, 'r+') as file:
+            lines = file.readlines()
+
+            # Go to the beginning of the file
+            file.seek(0)
+
+            # Remove empty lines
+            lines = [line.strip() for line in lines if line.strip()]
+
+            # Write the updated content back to the original file
+            file.writelines('\n'.join(lines))
+
+            # Truncate the file in case the new content is shorter than the previous content
+            file.truncate()
+
+        print("Empty lines removed. Original file updated.")
+    except FileNotFoundError:
+        print(f"File {input_file} not found")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 def extract_params (results_dir,paramspider_arg,livedomains):
@@ -524,7 +563,7 @@ def perform_scan(scan_domain, scan_type, paramspider_arg):
 
 
     # Run httpx
-    httpx_command = ["httpx", "-l", subfinder_domains, "-o", httpx_live_domains,"-t","100","-rl","300","-p","80,81,443,1433,1434,1521,1944,2301,3000,3128,3306,4000,4001,4002,4100,5000,5432,5800,5801,5802,6346,6347,7001,7002,8000,8001,8080,8443,8888,9000,9090,9001,9443,30821"]
+    httpx_command = ["httpx", "-l", subfinder_domains, "-o", httpx_live_domains,"-t","400","-rl","800","-p","80,81,443,1433,1434,1521,1944,2301,3000,3128,3306,4000,4001,4002,4100,5000,5432,5800,5801,5802,6346,6347,7001,7002,8000,8001,8080,8443,8888,9000,9090,9001,9443,30821"]
     if silent_mode_temp:
         httpx_command.append("-silent")
 
