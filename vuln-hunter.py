@@ -3,7 +3,6 @@ Vuln-Hunter: Automated Domain and Host vulneratbility hunting Tool
 Version: 0.0.1
 Author: NumLocK15 (https://github.com/NumLocK15)
 Created: 12/1/2024
-Last Modified: notyet
 
 Description:
     Vuln-Hunter is a script designed to automate the process of scanning domains
@@ -149,6 +148,8 @@ parser.add_argument('-t', '--timeout', type=int, default=30, help='Timeout for e
 parser.add_argument('--silent', action='store_true', help='Run scans in silent mode')
 parser.add_argument('--allparams', action='store_true', help='using this option will use both katana and paramspider for url extraction then merge them before fuzzing')
 parser.add_argument('--nobrute', action='store_true', help='diable the bruteforcing feature and runs param grabber directly on the live domains')
+parser.add_argument('--skipenum', action='store_true', help='disable subfinder and Httpx, this option will run the scan directly without enumeration')
+
 
 
 
@@ -231,7 +232,8 @@ if args.allparams:
     all_params = 1
 
 # define bruteforcing Default it is running
-brute_status = 1
+## Function disabled too many bugs in the code. if you enable it, work on debugging the code. 
+brute_status = 0
 if args.nobrute:
     brute_status = 0
 
@@ -239,6 +241,11 @@ if args.nobrute:
 timeout_value = 900
 if args.timeout:
     timeout_value = args.timeout * 60
+
+# Define enum
+skip_enum = 0
+if args.skipenum:
+    skip_enum = 1
 
 def run_command(command):
     """Helper function to run a command with optional silence and timeout."""
@@ -254,8 +261,8 @@ def nuclie_scan (results_dir,livedomains):
     if not args.nobasic:
         nuclei_basic_output_file = f"{results_dir}/nuclei-basic-scan-results"
         nuclei_command = [
-            "nuclei", "-l", livedomains, "-rl", "500", "-c", "200",
-            "-bs", "100", "-timeout", "1", "-tags" ,"wp-plugin,cve,wordpress,panel,xss,exposure,osint,tech,lfi,edb",
+            "nuclei", "-l", livedomains, "-rl", "250", "-c", "50",
+            "-bs", "10", "-timeout", "5", "-tags" ,"wp-plugin,cve,wordpress,xss,exposure,osint,edb", "-severity","critical,high","-no-httpx",
             "-o", nuclei_basic_output_file, "-stats"
         ]
         if silent_mode_temp:
@@ -301,7 +308,7 @@ def read_urls_from_file(file_path):
         with open(file_path, 'r') as file:
             return [line.strip() for line in file if line.strip()]  # Read non-empty lines
     except FileNotFoundError:
-        print(f"Warning: File not found - {file_path}")
+        #print(f"Warning: File not found - {file_path}")
         return []
 
 def merge_and_deduplicate_urls(katana_file, paramspider_file, output_file):
@@ -325,19 +332,6 @@ def merge_and_deduplicate_urls(katana_file, paramspider_file, output_file):
     with open(output_file, 'w') as file:
         for url in sorted(combined_urls):
             file.write(url + '\n')
-
-
-# def tech_detect_func (results_dir,livedomains):
-#     # Run nuclie tech-detect
-#     tech_domains_file = f"{results_dir}/Tech-domains.results"
-
-#     tech_command = [
-#         "nuclei", "-rl", "500", "-c", "200", "-bs", "10",
-#         "-timeout", "2", "-retries", "0", "-tags", "tech",
-#         "-list", livedomains, "-o", tech_domains_file, "-stats"
-#     ]
-#     run_command(tech_command)
-#     print(f"{GREEN} Checking Tecknoligy is completed. Results are stored in {results_dir}/tech-domains.{NC}") 
 
 def run_paramspider (live_domains_file, extracted_params_file):
    
@@ -373,10 +367,9 @@ def run_paramspider (live_domains_file, extracted_params_file):
 def run_katana (live_domains_file, extracted_params_file):
     # Run Katana with output directed to a file
 
-    katana_command = ["katana", "-list", live_domains_file, "-f", "qurl", "-timeout", "2","-aff", "-c", "50", "-p", "50","-ignore-query-params","-strategy", "breadth-first", "-o", extracted_params_file]
-    katana_command.append("-silent")
-    katana_command.append("-ignore-query-params")
-
+    katana_command = ["katana", "-list", live_domains_file, "-f", "qurl", "-timeout", "5","-aff","-ignore-query-params","-d","7", "-o", extracted_params_file]
+    print ("running KATANA ...")
+    
     run_command(katana_command)
     print(f"{GREEN}Parameterized URL search with Katana completed. Results are stored in {extracted_params_file}.{NC}")
 
@@ -468,7 +461,7 @@ def remove_empty_lines(input_file):
 
 def extract_params (results_dir,paramspider_arg,livedomains):
     extracted_params_file = f"{results_dir}/Extracted_parameter.results"
-    brute_results = f"{results_dir}/Live_domains_with_brute.results"
+    brute_results = f"{results_dir}/live_domains.results"
 
     katana_extracted_params_file =  extracted_params_file +"-katana" 
     paramspider_extracted_params_file = extracted_params_file + "-paramspider"
@@ -512,8 +505,7 @@ def nuclie_fuzzing (results_dir):
     # Run nuclei for fuzzing scan
     nuclei_fuzzing_output_file = f"{results_dir}/Nuclei_fuzzer.results"
     nuclei_command = [
-        "nuclei", "-rl", "500", "-c", "200", "-bs", "100",
-        "-timeout", "1", "-retries", "0", "-t", "fuzzing-templates",
+        "nuclei","-timeout", "7", "-t", "fuzzing-templates",
         "-list", extracted_params_file, "-o", nuclei_fuzzing_output_file, "-stats"
     ]
     if silent_mode_temp:
@@ -552,23 +544,33 @@ def perform_scan(scan_domain, scan_type, paramspider_arg):
     subfinder_domains = f"{results_dir}/All-domains.results"
     httpx_live_domains = f"{results_dir}/live_domains.results"
 
-    
-    #### Starting the enumeration process
-    # Run subfinder
-    subfinder_command = ["subfinder", "-d", scan_domain, "-o", subfinder_domains]
-    if silent_mode_temp:
-        subfinder_command.append("-silent")
-    run_command(subfinder_command)
-    print(f"{GREEN}subdomain search with subfinder is completed. Results are stored in {subfinder_domains}{NC}")
+    if (skip_enum) :
+
+        print(f"{GREEN}skipping enumeration proccess..{NC}")
+        # crete a file mimiking the results fo subfinder and httpx
+        with open(subfinder_domains, "a") as file:
+            file.write(scan_domain)
+        # crete a file mimiking the results fo subfinder and httpx
+        with open(httpx_live_domains, "a") as file:
+            file.write(scan_domain)
+
+    else:
+        #### Starting the enumeration process
+        # Run subfinder
+        subfinder_command = ["subfinder", "-d", scan_domain, "-o", subfinder_domains]
+        if silent_mode_temp:
+            subfinder_command.append("-silent")
+        run_command(subfinder_command)
+        print(f"{GREEN}subdomain search with subfinder is completed. Results are stored in {subfinder_domains}{NC}")
 
 
-    # Run httpx
-    httpx_command = ["httpx", "-l", subfinder_domains, "-o", httpx_live_domains,"-t","400","-rl","800","-p","80,81,443,1433,1434,1521,1944,2301,3000,3128,3306,4000,4001,4002,4100,5000,5432,5800,5801,5802,6346,6347,7001,7002,8000,8001,8080,8443,8888,9000,9090,9001,9443,30821"]
-    if silent_mode_temp:
-        httpx_command.append("-silent")
+        # Run httpx
+        httpx_command = ["httpx", "-l", subfinder_domains, "-o", httpx_live_domains,"-t","200","-rl","400","-p","80,81,443,1433,1434,1521,1944,2301,3000,3128,3306,4000,4001,4002,4100,5000,5432,5800,5801,5802,6346,6347,7001,7002,8000,8001,8080,8443,8888,9000,9090,9001,9443,30821"]
+        if silent_mode_temp:
+            httpx_command.append("-silent")
 
-    run_command(httpx_command)
-    print(f"{GREEN}live cheack with httpx is completed. Results are stored in {httpx_live_domains}")
+        run_command(httpx_command)
+        print(f"{GREEN}live cheack with httpx is completed. Results are stored in {httpx_live_domains}")
     
 
     #### starting the scanning process
